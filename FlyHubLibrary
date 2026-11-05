@@ -609,8 +609,4 @@ track(mainFrame.Destroying:Connect(function()
 end))
 
 Tabs.Home:Select()
-notify("FlyHub", "Gold Edition berhasil dimuat.", 4)
-
-
-
-buat script ini menjadi loadstring github bang 
+notify("FlyHub", "Gold Edition berhasil dimuat.", 4) 
