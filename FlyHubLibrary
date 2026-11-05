@@ -1,0 +1,616 @@
+--========================================================
+-- FlyHub | GOLD EDITION
+-- Template ProxyLib — isi fitur lu di bagian CALLBACK.
+--========================================================
+
+local Config = {
+    Name = "FlyHub",
+    Subtitle = "GOLD EDITION",
+
+    Gold = Color3.fromRGB(218, 170, 65),
+
+    Assets = {
+        -- Isi angka ID atau "rbxassetid://123456789".
+        -- Kosongkan jika belum punya.
+        Logo = "rbxassetid://109803428097841",
+        Background = "rbxassetid://136112125064049",
+        OpenClose = "rbxassetid://109803428097841",
+    },
+
+    Audio = {
+        Enabled = true,
+        Volume = 0.35,
+
+        -- Boleh diganti dengan asset ID audio milik lu.
+        Click = "rbxasset://sounds/electronicpingshort.wav",
+        Hover = "rbxasset://sounds/electronicpingshort.wav",
+        Open = "rbxasset://sounds/electronicpingshort.wav",
+        Close = "rbxasset://sounds/electronicpingshort.wav",
+        Notification = "rbxasset://sounds/electronicpingshort.wav",
+    },
+}
+
+--========================================================
+-- LOAD & RUNTIME
+--========================================================
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local SoundService = game:GetService("SoundService")
+local Env = type(getgenv) == "function" and getgenv() or _G
+
+local function asset(value)
+    local id = tostring(value or "")
+    if id == "" or id == "0" then
+        return ""
+    end
+    if id:match("^%d+$") then
+        return "rbxassetid://" .. id
+    end
+    return id
+end
+
+local loaded, ProxyLib = pcall(function()
+    local source = game:HttpGet(
+        "https://raw.githubusercontent.com/ProxyHubDev/ProxyLib/refs/heads/main/Documents/ProxyLibrary"
+    )
+    local chunk, err = loadstring(source)
+    assert(chunk, err)
+    return chunk()
+end)
+
+if not loaded then
+    warn("[FlyHub] Gagal memuat ProxyLib: " .. tostring(ProxyLib))
+    return
+end
+
+-- Bersihkan template lama saat script dijalankan ulang.
+if type(Env.FlyHubCleanup) == "function" then
+    local ok, err = pcall(Env.FlyHubCleanup)
+    if not ok then
+        warn("[FlyHub] Cleanup gagal: " .. tostring(err))
+        return
+    end
+end
+
+local Lib = ProxyLib.new()
+local connections = {}
+local alive = true
+
+local function track(connection)
+    table.insert(connections, connection)
+    return connection
+end
+
+--========================================================
+-- SOUND
+--========================================================
+
+local soundFolder = Instance.new("Folder")
+soundFolder.Name = "FlyHubAudio"
+soundFolder.Parent = SoundService
+
+local sounds = {}
+local lastPlayed = {}
+
+local soundStyle = {
+    Click = {Pitch = 1.6, Volume = 0.55},
+    Hover = {Pitch = 2.0, Volume = 0.15},
+    Open = {Pitch = 1.15, Volume = 0.65},
+    Close = {Pitch = 0.85, Volume = 0.45},
+    Notification = {Pitch = 1.3, Volume = 0.8},
+}
+
+for name, style in pairs(soundStyle) do
+    local sound = Instance.new("Sound")
+    sound.Name = name
+    sound.SoundId = asset(Config.Audio[name])
+    sound.PlaybackSpeed = style.Pitch
+    sound.Volume = Config.Audio.Volume * style.Volume
+    sound.Parent = soundFolder
+    sounds[name] = sound
+end
+
+local function playSound(name)
+    if not alive or not Config.Audio.Enabled then
+        return
+    end
+
+    local sound = sounds[name]
+    if not sound or sound.SoundId == "" then
+        return
+    end
+
+    -- Hindari suara bertumpuk ketika pointer bergerak cepat.
+    local now = os.clock()
+    local cooldown = name == "Hover" and 0.12 or 0.06
+
+    if now - (lastPlayed[name] or -math.huge) < cooldown then
+        return
+    end
+
+    lastPlayed[name] = now
+    sound:Stop()
+    sound.TimePosition = 0
+    sound:Play()
+end
+
+--========================================================
+-- CLEANUP
+--========================================================
+
+local function cleanup()
+    if not alive then
+        return
+    end
+    alive = false
+
+    for _, connection in ipairs(connections) do
+        connection:Disconnect()
+    end
+    table.clear(connections)
+
+    soundFolder:Destroy()
+    Lib:Destroy()
+
+    if Env.FlyHubCleanup == cleanup then
+        Env.FlyHubCleanup = nil
+    end
+
+    -- Tambahkan cleanup fitur lu di sini.
+end
+
+Env.FlyHubCleanup = cleanup
+
+--========================================================
+-- WINDOW
+--========================================================
+
+local windowOK, Window = pcall(function()
+    return Lib:CreateWindow({
+        Title = Config.Name,
+        Subtitle = Config.Subtitle,
+        Icon = asset(Config.Assets.Logo),
+
+        Size = Vector2.new(560, 420),
+        MinSize = Vector2.new(380, 300),
+        MaxSize = Vector2.new(900, 650),
+
+        Theme = Config.Gold,
+        TypeUI = "Modern",
+        Language = "English",
+        Search = true,
+
+        AutoSave = false,
+        AutoLoad = false,
+        DefaultFps = true,
+        DefaultPing = true,
+        DefaultProfile = true,
+
+        TitleConfig = {
+            Gradient = true,
+            Colors = {
+                Color3.fromRGB(255, 235, 170),
+                Color3.fromRGB(218, 170, 65),
+            },
+            Words = {"FlyHub"},
+        },
+
+        BackgroundImage = {
+            Id = asset(Config.Assets.Background),
+            Active = asset(Config.Assets.Background) ~= "",
+        },
+
+        Acrylic = {
+            Enabled = true,
+            Opacity = 0.88,
+        },
+
+        ConfigPanel = {
+            Enabled = true,
+            Theme = true,
+            Acrylic = true,
+            BackgroundImage = true,
+            Fps = true,
+            Ping = true,
+            Profile = true,
+            HideNotify = true,
+            Language = false,
+        },
+
+        -- Tombol bawaan ProxyLib: tap untuk buka/tutup.
+        FloatButton = {
+            Shape = "Circle",
+            Color = "Black",
+            Size = 52,
+            Icon = asset(Config.Assets.OpenClose),
+        },
+    })
+end)
+
+if not windowOK then
+    cleanup()
+    warn("[FlyHub] Gagal membuat window: " .. tostring(Window))
+    return
+end
+
+local function notify(title, message, duration)
+    if not alive then
+        return
+    end
+
+    Window:Notify({
+        Title = title,
+        Description = message,
+        Duration = duration or 4,
+    })
+
+    playSound("Notification")
+end
+
+--========================================================
+-- FLYHUB ICONS
+-- Tempel SEBELUM local Tabs = { ... }
+--========================================================
+
+local Icons = {
+    Home     = "rbxassetid://10723407389",
+    Main     = "rbxassetid://10723424646",
+    Extra    = "rbxassetid://10734930886",
+    Settings = "rbxassetid://10734950309",
+
+    Play     = "rbxassetid://10734923549",
+    Bell     = "rbxassetid://10709775704",
+    Power    = "rbxassetid://10734930466",
+    Volume   = "rbxassetid://10747375679",
+    Dropdown = "rbxassetid://10709790948",
+    Image    = "rbxassetid://10723415040",
+    Star     = "rbxassetid://10734966248",
+}
+
+local TitleIcons = {
+    ["Tes Notifikasi"] = Icons.Bell,
+    ["Contoh Button"] = Icons.Play,
+    ["Contoh Toggle"] = Icons.Power,
+    ["Contoh Dropdown"] = Icons.Dropdown,
+    ["UI Sound"] = Icons.Volume,
+    ["Unload FlyHub"] = Icons.Power,
+    ["Tema & Background"] = Icons.Image,
+    ["Welcome to FlyHub"] = Icons.Star,
+}
+
+local DefaultIcons = {
+    CreateButton = Icons.Play,
+    CreateToggle = Icons.Power,
+    CreateDropdown = Icons.Dropdown,
+    CreateSection = Icons.Star,
+    CreateParagraph = Icons.Star,
+}
+
+local originalCreateTab = Window.CreateTab
+
+function Window:CreateTab(options)
+    local tabOptions = table.clone(options or {})
+
+    if not tabOptions.Icon or tabOptions.Icon == "" then
+        tabOptions.Icon = Icons[tabOptions.Title] or Icons.Extra
+    end
+
+    local tab = originalCreateTab(self, tabOptions)
+
+    for methodName, defaultIcon in pairs(DefaultIcons) do
+        local originalMethod = tab[methodName]
+        local fallbackIcon = defaultIcon
+
+        if type(originalMethod) == "function" then
+            tab[methodName] = function(self, componentOptions)
+                local opts = table.clone(componentOptions or {})
+
+                -- Icon manual selalu diprioritaskan.
+                if not opts.Icon or opts.Icon == "" then
+                    opts.Icon = TitleIcons[opts.Title] or fallbackIcon
+                end
+
+                return originalMethod(self, opts)
+            end
+        end
+    end
+
+    -- Slider tidak memiliki opsi Icon di dokumentasi.
+    -- Gunakan simbol pada judul agar tetap ada penanda visual.
+    local originalSlider = tab.CreateSlider
+
+    if type(originalSlider) == "function" then
+        tab.CreateSlider = function(self, componentOptions)
+            local opts = table.clone(componentOptions or {})
+            opts.Title = "≡  " .. (opts.Title or "Slider")
+            return originalSlider(self, opts)
+        end
+    end
+
+    return tab
+end
+
+--========================================================
+-- TAB
+--========================================================
+
+local Tabs = {
+    Home = Window:CreateTab({
+        Title = "Home",
+        Subtitle = "Welcome",
+    }),
+
+    Main = Window:CreateTab({
+        Title = "Main",
+        Subtitle = "Fitur utama",
+    }),
+
+    Extra = Window:CreateTab({
+        Title = "Extra",
+        Subtitle = "Fitur tambahan",
+    }),
+
+    Settings = Window:CreateTab({
+        Title = "Settings",
+        Subtitle = "Tampilan & audio",
+    }),
+}
+
+--========================================================
+-- HOME
+--========================================================
+
+Tabs.Home:CreateSection({Text = "FLYHUB • GOLD EDITION"})
+
+Tabs.Home:CreateParagraph({
+    Title = "Welcome to FlyHub",
+    Description = "Template siap diisi. Gunakan tombol mengambang untuk membuka atau menyembunyikan UI.",
+})
+
+Tabs.Home:CreateButton({
+    Title = "Tes Notifikasi",
+    Description = "Preview notifikasi beserta efek suaranya.",
+    Callback = function()
+        notify("FlyHub", "UI siap. Tambahkan fitur lu di tab Main.")
+    end,
+})
+
+--========================================================
+-- MAIN — TEMPAT ISI FITUR LU
+--========================================================
+
+local State = {
+    Enabled = false,
+    Value = 50,
+    Mode = "Mode A",
+}
+
+Tabs.Main:CreateSection({Text = "Fitur Utama"})
+
+Tabs.Main:CreateButton({
+    Title = "Contoh Button",
+    Description = "Ganti callback dengan fungsi lu.",
+    Callback = function()
+        -- ISI SCRIPT LU DI SINI
+
+        notify("FlyHub", "Button berhasil diklik.")
+    end,
+})
+
+Tabs.Main:CreateToggle({
+    Title = "Contoh Toggle",
+    Description = "Aktif / nonaktif.",
+    Default = State.Enabled,
+
+    Callback = function(value)
+        State.Enabled = value
+
+        if value then
+            -- KODE SAAT ON
+        else
+            -- KODE SAAT OFF
+        end
+    end,
+})
+
+Tabs.Main:CreateSlider({
+    Title = "Contoh Slider",
+    Min = 0,
+    Max = 100,
+    Default = State.Value,
+
+    Callback = function(value)
+        State.Value = value
+        -- PAKAI value DI SINI
+    end,
+})
+
+Tabs.Main:CreateDropdown({
+    Title = "Contoh Dropdown",
+    Options = {"Mode A", "Mode B", "Mode C"},
+    Default = State.Mode,
+    Multiple = false,
+
+    Callback = function(value)
+        State.Mode = value
+        -- KODE SESUAI PILIHAN
+    end,
+})
+
+--========================================================
+-- EXTRA — TAMBAHKAN KOMPONEN LU DI SINI
+--========================================================
+
+Tabs.Extra:CreateSection({Text = "Fitur Tambahan"})
+
+Tabs.Extra:CreateParagraph({
+    Title = "Slot Kosong",
+    Description = "Tambahkan button, toggle, slider, atau dropdown di bagian EXTRA.",
+})
+
+-- Contoh penambahan:
+-- Tabs.Extra:CreateButton({
+--     Title = "Fitur Baru",
+--     Callback = function()
+--         -- Isi fitur
+--     end,
+-- })
+
+--========================================================
+-- SETTINGS
+--========================================================
+
+Tabs.Settings:CreateSection({Text = "Audio"})
+
+Tabs.Settings:CreateToggle({
+    Title = "UI Sound",
+    Description = "Efek klik, hover, buka/tutup, dan notifikasi.",
+    Default = Config.Audio.Enabled,
+
+    Callback = function(value)
+        Config.Audio.Enabled = value
+
+        if not value then
+            for _, sound in pairs(sounds) do
+                sound:Stop()
+            end
+        end
+    end,
+})
+
+Tabs.Settings:CreateSlider({
+    Title = "Volume UI",
+    Min = 0,
+    Max = 100,
+    Default = Config.Audio.Volume * 100,
+
+    Callback = function(value)
+        Config.Audio.Volume = value / 100
+
+        for name, sound in pairs(sounds) do
+            sound.Volume = Config.Audio.Volume * soundStyle[name].Volume
+        end
+    end,
+})
+
+Tabs.Settings:CreateParagraph({
+    Title = "Tema & Background",
+    Description = "Klik gear di header untuk mengatur tampilan. Asset ID default tersedia di Config.Assets.",
+})
+
+Tabs.Settings:CreateButton({
+    Title = "Unload FlyHub",
+    Description = "Hapus UI dan hentikan efek suara.",
+    Confirmation = true,
+    Callback = cleanup,
+})
+
+--========================================================
+-- FONT & SOUND PADA KOMPONEN UI
+--========================================================
+
+local mainFrame = Window:GetMainFrame()
+-- Redupkan gambar latar agar tulisan lebih terbaca.
+-- Hanya menargetkan gambar besar, bukan ikon kecil.
+local function dimBackground(object)
+    if not object:IsA("ImageLabel") then
+        return
+    end
+
+    local frameSize = mainFrame.AbsoluteSize
+    local imageSize = object.AbsoluteSize
+
+    if frameSize.X <= 0 or frameSize.Y <= 0 then
+        return
+    end
+
+    if imageSize.X >= frameSize.X * 0.75
+        and imageSize.Y >= frameSize.Y * 0.75 then
+        object.ImageColor3 = Color3.fromRGB(100, 100, 100)
+    end
+end
+
+task.defer(function()
+    if not alive then return end
+
+    for _, object in ipairs(mainFrame:GetDescendants()) do
+        dimBackground(object)
+    end
+end)
+local screenGui = mainFrame:FindFirstAncestorOfClass("ScreenGui")
+local uiRoot = screenGui or mainFrame
+local styled = setmetatable({}, {__mode = "k"})
+
+local function styleObject(object)
+    if not alive or styled[object] then
+        return
+    end
+    styled[object] = true
+
+    if object:IsA("TextLabel")
+        or object:IsA("TextButton")
+        or object:IsA("TextBox") then
+
+        -- Pertahankan perbedaan ketebalan font dari library.
+        local weight = object.FontFace.Weight
+        local bold = weight == Enum.FontWeight.Bold
+            or weight == Enum.FontWeight.SemiBold
+            or weight == Enum.FontWeight.Heavy
+
+        object.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+
+        -- Gold terang + outline gelap agar terbaca di atas gambar.
+        object.TextColor3 = Color3.fromRGB(255, 224, 150)
+        object.TextTransparency = 0
+        object.TextStrokeColor3 = Color3.fromRGB(10, 7, 2)
+        object.TextStrokeTransparency = 0.2
+    end
+    
+    if object:IsA("TextBox") then
+        object.PlaceholderColor3 = Color3.fromRGB(205, 184, 135)
+    end
+
+    if object:IsA("GuiButton") then
+        track(object.MouseEnter:Connect(function()
+            playSound("Hover")
+        end))
+
+        track(object.Activated:Connect(function()
+            playSound("Click")
+        end))
+    end
+end
+
+track(uiRoot.DescendantAdded:Connect(function(object)
+    task.defer(function()
+        if alive and object:IsDescendantOf(uiRoot) then
+            styleObject(object)
+        end
+    end)
+end))
+
+for _, object in ipairs(uiRoot:GetDescendants()) do
+    styleObject(object)
+end
+
+-- Efek ketika window disembunyikan / ditampilkan.
+track(mainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+    playSound(mainFrame.Visible and "Open" or "Close")
+end))
+
+-- Bersihkan audio jika window dihancurkan oleh library.
+track(mainFrame.Destroying:Connect(function()
+    if alive then
+        task.defer(cleanup)
+    end
+end))
+
+Tabs.Home:Select()
+notify("FlyHub", "Gold Edition berhasil dimuat.", 4)
+
+
+
+buat script ini menjadi loadstring github bang 
